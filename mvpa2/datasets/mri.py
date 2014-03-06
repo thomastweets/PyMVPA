@@ -152,6 +152,59 @@ def map2nifti(dataset, data=None, imghdr=None, imgtype=None):
             % (imgtype, imghdr))
     return RuntimeError("Should have never got here -- check your Python")
 
+def map2vmp(dataset, data=None, imghdr=None):
+    """Maps data(sets) into the original dataspace and wraps it into a BrainVoyager VMP file.
+
+    Parameters
+    ----------
+    dataset : Dataset
+      The mapper of this dataset is used to perform the reverse-mapping.
+    data : ndarray or Dataset, optional
+      The data to be wrapped into NiftiImage. If None (default), it
+      would wrap samples of the provided dataset. If it is a Dataset
+      instance -- takes its samples for mapping.
+    imghdr : None or dict, optional
+      Image header data. If None, the default header in nibabel.bv_vmp is used.
+
+    Returns
+    -------
+    Image
+      Instance of a class derived from VmpImage
+    """
+    import nibabel
+    if data is None:
+        data = dataset.samples
+    elif isinstance(data, Dataset):
+        # ease users life
+        data = data.samples
+
+    # call the appropriate function to map single samples or multiples
+    if len(data.shape) > 1:
+        dsarray = dataset.a.mapper.reverse(data)
+    else:
+        dsarray = dataset.a.mapper.reverse1(data)
+
+    # sync the VMP header with the VTC header
+    if imghdr is None:
+        # for now we will only support VMP files that are generated with information from a VTC header
+        if dataset.a.imgtype is not nibabel.VtcImage:
+            raise ValueError(
+                "Dataset is of imgtype %s -- cannot generate an VmpImage without VtcImage as source or given header"
+                % (dataset.a.imgtype))
+        if 'imghdr' in dataset.a:
+            hdr = dataset.a.imghdr
+            imghdr = nibabel.VmpHeader()
+            imghdr['XStart'] = hdr['XStart']
+            imghdr['YStart'] = hdr['YStart']
+            imghdr['ZStart'] = hdr['ZStart']
+            imghdr['XEnd'] = hdr['XEnd']
+            imghdr['YEnd'] = hdr['YEnd']
+            imghdr['ZEnd'] = hdr['ZEnd']
+            imghdr['Resolution'] = hdr['Resolution']
+            imghdr._add_submap(len(data.shape)-1)
+
+    return nibabel.VmpImage(dsarray, None, imghdr)
+
 
 def fmri_dataset(samples, targets=None, chunks=None, mask=None,
                  sprefix='voxel', tprefix='time', add_fa=None,):
